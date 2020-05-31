@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (extras.classList.contains("collapsed")) {
+            expandcollapse.classList.add("expander")
+        } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    sort_column(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>report.html</h1>
+    <p>Report generated on 29-May-2020 at 17:59:58 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v2.1.1</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{"pluggy": "0.13.1", "py": "1.8.1", "pytest": "5.4.1"}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Linux-5.3.0-51-generic-x86_64-with-Ubuntu-19.10-eoan</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{"html": "2.1.1", "metadata": "1.8.0"}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.7.5</td></tr></table>
+    <h2>Summary</h2>
+    <p>45 tests ran in 37.04 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">10 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">35 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input4]</td>
+          <td class="col-duration">1.09</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ae67d90&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Sun Oct 16 1994 18:30:00 GMT +0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate Date with time&#x27;, &#x27;Test Inputs&#x27;: &#x27;Mon Oct 17 1994 00:00:00 GMT+0530&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Sun Oct 16 1994 18:30:00 GMT+0000&#x27; in &#x27;Sun Oct 16 1994 18:30:00 GMT +0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input5]</td>
+          <td class="col-duration">0.18</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ae45ad0&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Fri Dec 18 2020 18:30:00  GMT +0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate date parser entering time and date&#x27;, &#x27;Test Inputs&#x27;: &#x27;18:30:00 GMT+0000 december 18&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Sun Oct 16 1994 18:30:00 GMT+0000&#x27; in &#x27;Fri Dec 18 2020 18:30:00  GMT +0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input6]</td>
+          <td class="col-duration">0.10</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02aebeb50&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Mon Oct 17  1994 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate MM/DD/YY&#x27;, &#x27;Test Inputs&#x27;: &#x27;10/17/94&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Sun Oct 16 1994 18:30:00 GMT+0000&#x27; in &#x27;Mon Oct 17  1994 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input7]</td>
+          <td class="col-duration">0.11</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ae45810&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Fri Nov 18 1994 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate MM-DD-YY&#x27;, &#x27;Test Inputs&#x27;: &#x27;11-18-94&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Sun Oct 16 1994 18:30:00 GMT+0000&#x27; in &#x27;Fri Nov 18 1994 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input8]</td>
+          <td class="col-duration">0.66</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ae29890&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Fri Aug 09 1996 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate MM.DD.YY&#x27;, &#x27;Test Inputs&#x27;: &#x27;08 09 96&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Fri Aug 09 1996 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input9]</td>
+          <td class="col-duration">0.13</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ae45fd0&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Sat Oct 02 2021 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate MM DD YY&#x27;, &#x27;Test Inputs&#x27;: &#x27;10 02 2021&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Sat Oct 02 2021 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input10]</td>
+          <td class="col-duration">0.08</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ad3ad90&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Sat  May 02 2020 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate MM/DD&#x27;, &#x27;Test Inputs&#x27;: &#x27;05/02&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Sat  May 02 2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input11]</td>
+          <td class="col-duration">0.10</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02acc5cd0&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Thur May 07 2020 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate MM-DD&#x27;, &#x27;Test Inputs&#x27;: &#x27;05-07&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Thur May 07 2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input12]</td>
+          <td class="col-duration">0.12</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02acd6f50&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Fri Jun 12 2020 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate MM.DD &#x27;, &#x27;Test Inputs&#x27;: &#x27;6.12&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Fri Jun 12 2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input13]</td>
+          <td class="col-duration">0.68</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02acdcd50&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Sat Jun 11 2020 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate MM DD &#x27;, &#x27;Test Inputs&#x27;: &#x27;06 11&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Mon Jun 11 2001 00:00:00 GMT+0000&#x27; in &#x27;Sat Jun 11 2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input14]</td>
+          <td class="col-duration">0.13</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02acd31d0&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27; Day Mon Dec 18 1995 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate YYYY/MM/DD&#x27;, &#x27;Test Inputs&#x27;: &#x27;1995\\12\\18&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Mon Jun 11 2001 00:00:00 GMT+0000&#x27; in &#x27;Day Mon Dec 18 1995 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input15]</td>
+          <td class="col-duration">0.10</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02aceea90&gt;, get_input = {&#x27;Expected Result&#x27;: &#x27;Invalid Date&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate DD/MM/YYYY &#x27;, &#x27;Test Inputs&#x27;: &#x27;24/12/1994 &#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Mon Jun 11 2001 00:00:00 GMT+0000&#x27; in &#x27;Invalid Date&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input16]</td>
+          <td class="col-duration">0.10</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02acf6150&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Wed Dec 15 2010 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate DD/MMM/YYYY &#x27;, &#x27;Test Inputs&#x27;: &#x27;15/Dec/2010&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Mon Jun 11 2001 00:00:00 GMT+0000&#x27; in &#x27;Wed Dec 15 2010 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input17]</td>
+          <td class="col-duration">0.11</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ad01d10&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Wed Dec 15 2010 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate subscript/super script date with date between month and year&#x27;, &#x27;Test Inputs&#x27;: &#x27;December 15th, 2010&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Mon Jun 11 2001 00:00:00 GMT+0000&#x27; in &#x27;Wed Dec 15 2010 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input18]</td>
+          <td class="col-duration">0.66</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac87d10&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Wed Dec 15 2010 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate subscript/super script date with date in the beginning&#x27;, &#x27;Test Inputs&#x27;: &#x27;15th Dec 2010&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Wed Dec 15 2010 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input19]</td>
+          <td class="col-duration">0.14</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac8f990&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;wed Dec 15 2010 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate by entering month in full text followed by year&#x27;, &#x27;Test Inputs&#x27;: &#x27;December 2010&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;wed Dec 15 2010 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input20]</td>
+          <td class="col-duration">0.08</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac96c50&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Tue Dec 15 2020 00:00:00 GMT+0000 &#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to to validate  MMM. Dd with subscript or superscript&#x27;, &#x27;Test Inputs&#x27;: &#x27;Dec. 15th&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Tue Dec 15 2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input21]</td>
+          <td class="col-duration">0.10</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac95690&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Tue Dec 15 2020 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate subscript or superscript date along with other texts&#x27;, &#x27;Test Inputs&#x27;: &#x27;15th of December&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Tue Dec 15 2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input22]</td>
+          <td class="col-duration">0.10</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02aca8d50&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27; Invalid Date&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate the submit result without entering any input&#x27;, &#x27;Test Inputs&#x27;: &#x27;no input&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Invalid Date&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input24]</td>
+          <td class="col-duration">0.69</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02acb07d0&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Tue Dec 01 2020 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to Ensure if Date field does not accept any character&#x27;, &#x27;Test Inputs&#x27;: &#x27;dec&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Tue Dec 01 2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input27]</td>
+          <td class="col-duration">0.76</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02acd3850&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Invalid date&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate if day field donot accept 30/31 for February&#x27;, &#x27;Test Inputs&#x27;: &#x27;February 31 2010&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Wed Mar 03 2010 00:00:00 GMT+0000&#x27; in &#x27;Invalid date&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input28]</td>
+          <td class="col-duration">0.15</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02acb0190&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Sat Feb 29  2020 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate day field does not accept 29 for February month unless it is leap year&#x27;, &#x27;Test Inputs&#x27;: &#x27;02-29-2020&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Wed Mar 03 2010 00:00:00 GMT+0000&#x27; in &#x27;Sat Feb 29  2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input29]</td>
+          <td class="col-duration">0.10</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02acbbdd0&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Wed May 01 2019 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to verify if the day field and month field should accept 1 and 01 format&#x27;, &#x27;Test Inputs&#x27;: &#x27;05-1-2019&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Wed Mar 03 2010 00:00:00 GMT+0000&#x27; in &#x27;Wed May 01 2019 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input30]</td>
+          <td class="col-duration">0.11</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02acba190&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27; Invalid Date&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate month field accepts value between 1 and 12&#x27;, &#x27;Test Inputs&#x27;: &#x27;1-2-2019, 13-02 2019&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Wed Mar 03 2010 00:00:00 GMT+0000&#x27; in &#x27;Invalid Date&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input31]</td>
+          <td class="col-duration">0.64</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac47ad0&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Sat Feb 05 2000 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate year field  donot accpets 0000&#x27;, &#x27;Test Inputs&#x27;: &#x27;02-05-0000&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Sat Feb 05 2000 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input33]</td>
+          <td class="col-duration">0.16</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac4b250&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Tue Jan 21 1997 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate year with apostrophe&#x27;, &#x27;Test Inputs&#x27;: &quot;Jan 21, &#x27;97&quot;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Tue Jan 21 1997 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input34]</td>
+          <td class="col-duration">0.10</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac4b150&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Thu May 28 2020 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate relaxed date with input today&#x27;, &#x27;Test Inputs&#x27;: &#x27;today&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Thu May 28 2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input35]</td>
+          <td class="col-duration">0.10</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac53b90&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Wed May 27 2020 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate relaxed date with input yesterday&#x27;, &#x27;Test Inputs&#x27;: &#x27;yesterday&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Wed May 27 2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input36]</td>
+          <td class="col-duration">0.63</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac4b6d0&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Fri May 22 2020 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate relaxed date with input last friday&#x27;, &#x27;Test Inputs&#x27;: &#x27;last friday&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Fri May 22 2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input37]</td>
+          <td class="col-duration">0.15</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac64410&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Thu Jun 04 2020 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate relaxed date with input next week&#x27;, &#x27;Test Inputs&#x27;: &#x27;next week&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Thu Jun 04 2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input38]</td>
+          <td class="col-duration">0.09</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac739d0&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Tue Apr 28 2020 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate relaxed date with input last month&#x27;, &#x27;Test Inputs&#x27;: &#x27;last month&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Tue Apr 28 2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input39]</td>
+          <td class="col-duration">0.10</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac7a290&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Tue Jun 02 2020 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate relaxed date with input ‘input in 5 days’&#x27;, &#x27;Test Inputs&#x27;: &#x27;In 5 days&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Tue Jun 02 2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input40]</td>
+          <td class="col-duration">0.12</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac80cd0&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Sat May 28 2005 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate relaxed date with input fifteen years ago&#x27;, &#x27;Test Inputs&#x27;: &#x27;fifteen years ago&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Sat May 28 2005 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input41]</td>
+          <td class="col-duration">0.77</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac12590&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Fri May 29 2020 00:00:00 GMT+0000&#x27;, &#x27;Test Case Description&#x27;: &#x27;test to validate relaxed date with input a day from now&#x27;, &#x27;Test Inputs&#x27;: &#x27;a day from now&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Fri May 29 2020 00:00:00 GMT+0000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input42]</td>
+          <td class="col-duration">0.17</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Propine.test_dateParser.TestDate object at 0x7fe02ac0ec90&gt;<br/>get_input = {&#x27;Expected Result&#x27;: &#x27;Sat Dec 28 2019 00:00:00 GMT+000&#x27;, &#x27;Test Case Description&#x27;: &#x27;Test to validate relaxed date with input 5 months before now&#x27;, &#x27;Test Inputs&#x27;: &#x27;5 months before now&#x27;}<br/><br/>    @pytest.mark.usefixtures(&quot;get_input&quot;)<br/>    def test_date_parser(self, get_input):<br/>    <br/>        if get_input[&quot;Expected Result&quot;] is not None and get_input[&quot;Test Inputs&quot;] is not None:<br/>            self.driver.find_element_by_name(&quot;date&quot;).send_keys(get_input[&quot;Test Inputs&quot;])<br/>            self.driver.find_element_by_xpath(&quot;//input[@type=&#x27;submit&#x27;]&quot;).click()<br/>            result = self.driver.find_element_by_xpath(&quot;/html[1]/body[1]/div[2]/div[1]/div[2]/div[1]&quot;).text.strip()<br/>            Expected_result = get_input[&quot;Expected Result&quot;].strip()<br/>    <br/>    <br/>&gt;           assert result in Expected_result<br/><span class="error">E           AssertionError: assert &#x27;Invalid date&#x27; in &#x27;Sat Dec 28 2019 00:00:00 GMT+000&#x27;</span><br/><br/>Propine/test_dateParser.py:32: AssertionError<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_tittle</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_url</td>
+          <td class="col-duration">0.05</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_url:test_dateParser.py:20 https://vast-dawn-73245.herokuapp.com/<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input0]</td>
+          <td class="col-duration">3.27</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input1]</td>
+          <td class="col-duration">3.30</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input2]</td>
+          <td class="col-duration">3.30</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input3]</td>
+          <td class="col-duration">3.28</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input23]</td>
+          <td class="col-duration">3.12</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input25]</td>
+          <td class="col-duration">2.65</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input26]</td>
+          <td class="col-duration">3.30</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Propine/test_dateParser.py::TestDate::test_date_parser[get_input32]</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody></table></body></html>
